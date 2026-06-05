@@ -1,0 +1,33 @@
+{
+  "name": "licitaciones-alerts",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/index.js",
+    "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "date-fns": "^4.4.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "lucide-react": "^1.17.0",
+    "node-cron": "^3.0.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.17.0",
+    "recharts": "^3.8.1",
+    "resend": "^4.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^8.2.2",
+    "tailwindcss": "^4.3.0",
+    "vite": "^5.1.0"
+  }
+}

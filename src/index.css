@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+body {
+  font-family: Inter, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+@page {
+  margin: 1.5cm;
+  size: A4;
+}
+
+@media print {
+  /* Ocultar navegación y controles */
+  .print\:hidden { display: none !important; }
+  aside, nav, header { display: none !important; }
+
+  /* Layout: ancho completo */
+  main { margin-left: 0 !important; padding: 1rem 2rem !important; max-width: 100% !important; }
+  body { background: white !important; }
+
+  /* Preservar colores e íconos */
+  * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+
+  /* Ocultar secciones que no son relevantes en el PDF */
+  .print-hide-ai { display: none !important; }
+
+  /* Evitar cortes de página dentro de secciones */
+  .bg-white { break-inside: avoid; }
+}
