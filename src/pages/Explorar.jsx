@@ -198,7 +198,7 @@ export default function Explorar() {
       <PageHeader title="Explorar" subtitle="Busca y filtra licitaciones del mercado público chileno" />
 
       {/* Search form */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 md:p-6 mb-6">
         <div className="flex items-center gap-2 mb-5">
           <div className="w-7 h-7 rounded-lg bg-orange-100 flex items-center justify-center">
             <Filter size={14} className="text-orange-500" />
@@ -295,7 +295,7 @@ export default function Explorar() {
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="submit"
               disabled={loading}

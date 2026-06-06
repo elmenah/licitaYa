@@ -121,36 +121,19 @@ function KanbanCard({ item, colIndex, totalCols, onMove, onDelete, onNota }) {
 
 export default function Seguimiento() {
   const [items, setItems] = useState(getSeguimiento())
+  const [activeTab, setActiveTab] = useState(0) // para móvil
 
-  function reload() {
-    setItems(getSeguimiento())
-  }
-
-  function handleMove(id, columna) {
-    moveSeguimiento(id, columna)
-    reload()
-  }
-
-  function handleDelete(id) {
-    deleteSeguimiento(id)
-    reload()
-  }
-
-  function handleNota(id, notas) {
-    updateNotasSeguimiento(id, notas)
-    reload()
-  }
+  function reload() { setItems(getSeguimiento()) }
+  function handleMove(id, columna) { moveSeguimiento(id, columna); reload() }
+  function handleDelete(id) { deleteSeguimiento(id); reload() }
+  function handleNota(id, notas) { updateNotasSeguimiento(id, notas); reload() }
 
   const total = items.length
 
-  return (
-    <div>
-      <PageHeader
-        title="Seguimiento"
-        subtitle={total > 0 ? `${total} licitacion${total !== 1 ? 'es' : ''} en seguimiento` : 'Tablero de postulaciones'}
-      />
-
-      {total === 0 ? (
+  if (total === 0) {
+    return (
+      <div>
+        <PageHeader title="Seguimiento" subtitle="Tablero de postulaciones" />
         <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border border-dashed border-slate-200">
           <KanbanSquare size={52} className="text-slate-200 mb-4" />
           <p className="text-slate-500 font-semibold mb-1">Sin licitaciones en seguimiento</p>
@@ -158,45 +141,104 @@ export default function Seguimiento() {
             Abre una licitación y haz clic en "Agregar a seguimiento" para empezar a trackear tus postulaciones
           </p>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4 overflow-x-auto">
-          {COLUMNAS.map((col, colIndex) => {
-            const colItems = items.filter(i => i.columna === col.id)
-            const styles = COL_STYLES[col.color]
-            return (
-              <div key={col.id} className="min-w-52">
-                {/* Column header */}
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl mb-3 ${styles.header}`}>
-                  <div className={`w-2 h-2 rounded-full ${styles.dot}`} />
-                  <span className="text-xs font-bold">{col.label}</span>
-                  <span className="ml-auto text-xs font-semibold opacity-70">{colItems.length}</span>
-                </div>
+      </div>
+    )
+  }
 
-                {/* Cards */}
-                <div className="space-y-3">
-                  {colItems.length === 0 ? (
-                    <div className="border-2 border-dashed border-slate-200 rounded-xl py-8 text-center">
-                      <p className="text-xs text-slate-300">Vacío</p>
-                    </div>
-                  ) : (
-                    colItems.map(item => (
-                      <KanbanCard
-                        key={item.id}
-                        item={item}
-                        colIndex={colIndex}
-                        totalCols={COLUMNAS.length}
-                        onMove={handleMove}
-                        onDelete={handleDelete}
-                        onNota={handleNota}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
+  return (
+    <div>
+      <PageHeader
+        title="Seguimiento"
+        subtitle={`${total} licitacion${total !== 1 ? 'es' : ''} en seguimiento`}
+      />
+
+      {/* ── MÓVIL: tabs ───────────────────────────────── */}
+      <div className="md:hidden">
+        {/* Tab pills */}
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none">
+          {COLUMNAS.map((col, i) => {
+            const count = items.filter(it => it.columna === col.id).length
+            const styles = COL_STYLES[col.color]
+            const isActive = activeTab === i
+            return (
+              <button
+                key={col.id}
+                onClick={() => setActiveTab(i)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+                  isActive ? styles.header + ' shadow-sm' : 'bg-white border border-slate-200 text-slate-500'
+                }`}
+              >
+                <div className={`w-1.5 h-1.5 rounded-full ${styles.dot}`} />
+                {col.label}
+                <span className={`text-[10px] font-semibold ml-0.5 ${isActive ? 'opacity-70' : 'opacity-50'}`}>
+                  {count}
+                </span>
+              </button>
             )
           })}
         </div>
-      )}
+
+        {/* Columna activa */}
+        {(() => {
+          const col = COLUMNAS[activeTab]
+          const colItems = items.filter(i => i.columna === col.id)
+          return colItems.length === 0 ? (
+            <div className="border-2 border-dashed border-slate-200 rounded-2xl py-16 text-center">
+              <p className="text-sm text-slate-300 font-medium">Sin licitaciones aquí</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {colItems.map(item => (
+                <KanbanCard
+                  key={item.id}
+                  item={item}
+                  colIndex={activeTab}
+                  totalCols={COLUMNAS.length}
+                  onMove={handleMove}
+                  onDelete={handleDelete}
+                  onNota={handleNota}
+                />
+              ))}
+            </div>
+          )
+        })()}
+      </div>
+
+      {/* ── DESKTOP: kanban horizontal ────────────────── */}
+      <div className="hidden md:grid md:grid-cols-3 xl:grid-cols-5 gap-4">
+        {COLUMNAS.map((col, colIndex) => {
+          const colItems = items.filter(i => i.columna === col.id)
+          const styles = COL_STYLES[col.color]
+          return (
+            <div key={col.id}>
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl mb-3 ${styles.header}`}>
+                <div className={`w-2 h-2 rounded-full ${styles.dot}`} />
+                <span className="text-xs font-bold">{col.label}</span>
+                <span className="ml-auto text-xs font-semibold opacity-70">{colItems.length}</span>
+              </div>
+              <div className="space-y-3">
+                {colItems.length === 0 ? (
+                  <div className="border-2 border-dashed border-slate-200 rounded-xl py-8 text-center">
+                    <p className="text-xs text-slate-300">Vacío</p>
+                  </div>
+                ) : (
+                  colItems.map(item => (
+                    <KanbanCard
+                      key={item.id}
+                      item={item}
+                      colIndex={colIndex}
+                      totalCols={COLUMNAS.length}
+                      onMove={handleMove}
+                      onDelete={handleDelete}
+                      onNota={handleNota}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

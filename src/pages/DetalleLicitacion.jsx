@@ -215,11 +215,11 @@ export default function DetalleLicitacion() {
           </div>
         )}
 
-        <div className="flex items-start gap-4">
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-slate-900 leading-snug mb-2">{lic.Nombre}</h1>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:gap-4 gap-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg md:text-xl font-bold text-slate-900 leading-snug mb-2">{lic.Nombre}</h1>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-mono text-slate-400">{lic.CodigoExterno}</span>
+              <span className="text-xs font-mono text-slate-400">{lic.CodigoExterno}</span>
               {lic.Tipo && (
                 <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-semibold">{lic.Tipo}</span>
               )}
@@ -229,9 +229,9 @@ export default function DetalleLicitacion() {
             </div>
           </div>
           {monto && (
-            <div className="shrink-0 text-right">
-              <p className="text-xs text-slate-500 mb-1">Monto estimado</p>
-              <p className="text-2xl font-bold text-slate-900">{monto}</p>
+            <div className="sm:shrink-0 sm:text-right">
+              <p className="text-xs text-slate-500 mb-0.5">Monto estimado</p>
+              <p className="text-xl md:text-2xl font-bold text-slate-900">{monto}</p>
             </div>
           )}
         </div>
@@ -282,8 +282,8 @@ export default function DetalleLicitacion() {
           <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">
             Ítems requeridos ({lic.Items.Listado.length})
           </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-5 px-5">
+            <table className="w-full text-sm min-w-96">
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="text-left py-2 text-xs font-semibold text-slate-500">#</th>
