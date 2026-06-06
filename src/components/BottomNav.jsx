@@ -42,9 +42,10 @@ export default function BottomNav() {
           {/* Fondo oscuro */}
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
 
-          {/* Sheet deslizante desde abajo */}
+          {/* Sheet deslizante desde abajo — pb incluye safe area */}
           <div
-            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl pb-8"
+            className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-xl"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1.5rem)' }}
             onClick={e => e.stopPropagation()}
           >
             {/* Handle */}
@@ -92,8 +93,13 @@ export default function BottomNav() {
         </div>
       )}
 
-      {/* Barra inferior fija */}
-      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 flex md:hidden safe-bottom">
+      {/* Barra inferior fija
+          safe-bottom: rellena el safe-area-inset-bottom (home indicator iPhone / gesture bar Android)
+          Los items tienen py-2.5 propio, el padding-bottom del nav rellena el espacio del sistema */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 flex md:hidden"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
         {MAIN.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}

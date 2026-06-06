@@ -10,9 +10,16 @@ a {
   color: inherit;
 }
 
-/* Soporte para notch / safe area en iPhone */
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+/* Safe area para iPhones con notch / barra de gestos */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    /* Rellena el área del home indicator/gesture bar */
+    padding-bottom: env(safe-area-inset-bottom) !important;
+  }
+  .pb-nav-safe {
+    /* Contenido principal: altura de la barra (5rem) + safe area */
+    padding-bottom: calc(env(safe-area-inset-bottom) + 5rem) !important;
+  }
 }
 
 @page {
