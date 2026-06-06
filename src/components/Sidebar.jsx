@@ -57,7 +57,7 @@ export default function Sidebar() {
   const perfil = getPerfil()
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-60 bg-white border-r border-slate-100 flex flex-col z-20 shadow-sm">
+    <aside className="hidden md:flex fixed inset-y-0 left-0 w-60 bg-white border-r border-slate-100 flex-col z-20 shadow-sm">
       {/* Logo */}
       <div className="h-16 flex items-center px-5 border-b border-slate-100">
         <div className="flex items-center gap-2">

@@ -10,6 +10,11 @@ a {
   color: inherit;
 }
 
+/* Soporte para notch / safe area en iPhone */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 @page {
   margin: 1.5cm;
   size: A4;
