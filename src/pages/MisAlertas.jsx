@@ -1,24 +1,26 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Play, Trash2, Search, Plus, CheckCircle, AlertCircle, Upload } from 'lucide-react'
+import { Bell, Play, Trash2, Search, Plus, CheckCircle, AlertCircle, Cloud, CloudOff, RefreshCw } from 'lucide-react'
 import PageHeader from '../components/PageHeader'
 import Spinner from '../components/Spinner'
 import { getAlerts, deleteAlert, updateAlert } from '../utils/storage'
+import { getAlertsCloud, deleteAlertCloud } from '../utils/alertasCloud'
 import { getPerfil } from '../utils/perfil'
+import { isSupabaseEnabled } from '../utils/supabase'
 import { fetchLicitaciones } from '../utils/api'
 
-function AlertCard({ alert, onDelete, onRun, running, perfilEmail, serverActive, onRegister, registeredIds }) {
+// ─── AlertCard ────────────────────────────────────────────────────────────────
+
+function AlertCard({ alert, onDelete, onRun, running, cloudEnabled }) {
   const estadoLabel = alert.estado
     ? alert.estado.charAt(0).toUpperCase() + alert.estado.slice(1)
     : 'Todos'
 
-  const isRegistered = registeredIds.has(String(alert.id))
-
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <p className="font-semibold text-slate-800 text-sm">
+    <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-slate-800 text-sm truncate">
             {alert.nombre || <span className="text-slate-400 italic">Sin keyword</span>}
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -26,106 +28,104 @@ function AlertCard({ alert, onDelete, onRun, running, perfilEmail, serverActive,
             {alert.ultimosResultados !== undefined && (
               <span className="text-xs text-slate-400">{alert.ultimosResultados} resultados</span>
             )}
-            {perfilEmail && (
-              <span className="text-xs text-slate-400 truncate max-w-32">{perfilEmail}</span>
+            {alert.email && (
+              <span className="text-xs text-slate-400 truncate max-w-36">{alert.email}</span>
             )}
           </div>
         </div>
         <button
           onClick={() => onDelete(alert.id)}
-          className="text-slate-300 hover:text-red-400 transition-colors p-1"
+          className="text-slate-300 hover:text-red-400 transition-colors p-1 shrink-0"
+          aria-label="Eliminar alerta"
         >
           <Trash2 size={15} />
         </button>
       </div>
 
-      <p className="text-xs text-slate-400 mb-4">
+      <p className="text-xs text-slate-400">
         Creada el {new Date(alert.creadoEn).toLocaleDateString('es-CL')}
-        {alert.ultimaEjecucion && ` · Última ejecución: ${new Date(alert.ultimaEjecucion).toLocaleDateString('es-CL')}`}
+        {alert.ultimaEjecucion && ` · Revisada ${new Date(alert.ultimaEjecucion).toLocaleDateString('es-CL')}`}
       </p>
 
-      <div className="space-y-2">
+      <div className="space-y-2 mt-auto">
         <button
           onClick={() => onRun(alert)}
           disabled={running}
           className="w-full flex items-center justify-center gap-2 bg-orange-50 hover:bg-orange-100 text-orange-600 text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
         >
           {running ? <Spinner size="sm" /> : <Play size={14} />}
-          Ejecutar alerta
+          Ejecutar ahora
         </button>
 
-        {serverActive && perfilEmail && (
-          isRegistered ? (
-            <div className="w-full flex items-center justify-center gap-2 bg-green-50 text-green-600 text-xs font-semibold py-2 rounded-lg">
-              <CheckCircle size={12} />
-              Notificaciones activas
-            </div>
-          ) : (
-            <button
-              onClick={() => onRegister(alert)}
-              className="w-full flex items-center justify-center gap-2 border border-slate-200 hover:border-orange-200 hover:bg-orange-50 text-slate-500 hover:text-orange-600 text-xs font-medium py-2 rounded-lg transition-all"
-            >
-              <Upload size={12} />
-              Registrar en servidor
-            </button>
-          )
+        {/* Estado de notificación automática */}
+        {cloudEnabled ? (
+          <div className="w-full flex items-center justify-center gap-1.5 bg-green-50 text-green-600 text-xs font-semibold py-2 rounded-lg">
+            <CheckCircle size={12} />
+            Notificaciones automáticas activas
+          </div>
+        ) : (
+          <div className="w-full flex items-center justify-center gap-1.5 bg-slate-50 text-slate-400 text-xs py-2 rounded-lg">
+            <AlertCircle size={12} />
+            Sin notificaciones — configura Supabase
+          </div>
         )}
       </div>
     </div>
   )
 }
 
+// ─── Página principal ─────────────────────────────────────────────────────────
+
 export default function MisAlertas() {
-  const navigate = useNavigate()
-  const [alerts, setAlerts] = useState(getAlerts())
-  const [running, setRunning] = useState(null)
-  const [runResults, setRunResults] = useState(null)
-  const [runError, setRunError] = useState(null)
-  const [serverActive, setServerActive] = useState(null) // null | true | false
-  const [serverAlerts, setServerAlerts] = useState([])
-  const perfil = getPerfil()
+  const navigate    = useNavigate()
+  const perfil      = getPerfil()
 
+  const [alerts,      setAlerts]      = useState(getAlerts())
+  const [running,     setRunning]     = useState(null)
+  const [runResults,  setRunResults]  = useState(null)
+  const [runError,    setRunError]    = useState(null)
+  const [syncing,     setSyncing]     = useState(false)
+  const [lastSync,    setLastSync]    = useState(null)   // 'ok' | 'error' | null
+
+  const cloudActive = isSupabaseEnabled && !!perfil.email
+
+  // Al montar: sincronizar desde Supabase si está disponible
   useEffect(() => {
-    checkServer()
-  }, [])
+    if (cloudActive) syncFromCloud()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function checkServer() {
+  async function syncFromCloud() {
+    setSyncing(true)
+    setLastSync(null)
     try {
-      const ctrl = new AbortController()
-      const timeout = setTimeout(() => ctrl.abort(), 2000)
-      const res = await fetch('/api/health', { signal: ctrl.signal })
-      clearTimeout(timeout)
-      if (res.ok) {
-        setServerActive(true)
-        fetchServerAlerts()
+      const cloudAlerts = await getAlertsCloud(perfil.email)
+      if (cloudAlerts) {
+        // Combinar: cloud tiene prioridad; locales que no están en cloud se ignoran
+        setAlerts(cloudAlerts)
+        setLastSync('ok')
       } else {
-        setServerActive(false)
+        setLastSync('error')
       }
     } catch {
-      setServerActive(false)
+      setLastSync('error')
+    } finally {
+      setSyncing(false)
     }
   }
-
-  async function fetchServerAlerts() {
-    try {
-      const res = await fetch('/api/alerts')
-      if (res.ok) {
-        const data = await res.json()
-        setServerAlerts(data)
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  const registeredIds = new Set(serverAlerts.map(a => String(a.id)))
 
   function reload() {
-    setAlerts(getAlerts())
+    if (cloudActive) {
+      syncFromCloud()
+    } else {
+      setAlerts(getAlerts())
+    }
   }
 
-  function handleDelete(id) {
+  async function handleDelete(id) {
+    // Borrar localmente
     deleteAlert(id)
+    // Soft-delete en Supabase
+    if (cloudActive) await deleteAlertCloud(id)
     reload()
     if (runResults?.alertId === id) setRunResults(null)
   }
@@ -136,10 +136,13 @@ export default function MisAlertas() {
     setRunResults(null)
     try {
       const data = await fetchLicitaciones({
-        nombre: alert.nombre || undefined,
-        estado: alert.estado || undefined,
+        nombre: alert.nombre  || undefined,
+        estado: alert.estado  || undefined,
       })
-      updateAlert(alert.id, { ultimaEjecucion: new Date().toISOString(), ultimosResultados: data.length })
+      updateAlert(alert.id, {
+        ultimaEjecucion:   new Date().toISOString(),
+        ultimosResultados: data.length,
+      })
       reload()
       setRunResults({ alertId: alert.id, keyword: alert.nombre, data })
     } catch {
@@ -149,28 +152,9 @@ export default function MisAlertas() {
     }
   }
 
-  async function handleRegister(alert) {
-    if (!perfil.email) return
-    try {
-      const res = await fetch('/api/alerts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...alert,
-          email: perfil.email,
-        }),
-      })
-      if (res.ok) {
-        await fetchServerAlerts()
-      }
-    } catch {
-      // ignore
-    }
-  }
-
   return (
     <div>
-      <PageHeader title="Mis Alertas" subtitle="Búsquedas guardadas que puedes ejecutar en cualquier momento">
+      <PageHeader title="Mis Alertas" subtitle="Búsquedas guardadas con notificaciones automáticas por email">
         <button
           onClick={() => navigate('/explorar')}
           className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-xl transition-colors"
@@ -180,25 +164,45 @@ export default function MisAlertas() {
         </button>
       </PageHeader>
 
-      {/* Server status banner */}
-      {serverActive === false && (
+      {/* Banner: estado de Supabase */}
+      {cloudActive ? (
+        <div className="flex items-center gap-2.5 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl mb-6">
+          <Cloud size={15} className="shrink-0" />
+          <span className="flex-1">
+            <strong>Notificaciones activas</strong> — LicitaYa revisará automáticamente cada hora y te enviará un email cuando aparezcan nuevas licitaciones.
+          </span>
+          <button
+            onClick={syncFromCloud}
+            disabled={syncing}
+            className="flex items-center gap-1 text-xs text-green-600 hover:text-green-800 disabled:opacity-50 transition-colors shrink-0"
+          >
+            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Sincronizando...' : lastSync === 'ok' ? '✓ Al día' : 'Sincronizar'}
+          </button>
+        </div>
+      ) : (
         <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-700 text-sm px-4 py-3 rounded-xl mb-6">
-          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <CloudOff size={16} className="shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold">El servidor de notificaciones no está corriendo</p>
+            <p className="font-semibold">Notificaciones desactivadas</p>
             <p className="text-xs text-amber-600 mt-0.5">
-              Ejecuta <code className="font-mono bg-amber-100 px-1 rounded">npm run server</code> para activar alertas por email.
+              {!perfil.email
+                ? 'Agrega tu email en Mi Empresa para activar alertas.'
+                : 'Configura Supabase (VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY) para activar alertas por email.'}
             </p>
           </div>
-        </div>
-      )}
-      {serverActive === true && (
-        <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-sm px-4 py-3 rounded-xl mb-6">
-          <CheckCircle size={15} className="shrink-0" />
-          Servidor activo — notificaciones por email habilitadas
+          {!perfil.email && (
+            <button
+              onClick={() => navigate('/perfil')}
+              className="ml-auto text-xs font-semibold text-amber-700 underline underline-offset-2 shrink-0"
+            >
+              Ir a Mi Empresa
+            </button>
+          )}
         </div>
       )}
 
+      {/* Lista de alertas */}
       {alerts.length === 0 ? (
         <div className="text-center py-20">
           <Bell size={48} className="mx-auto text-slate-200 mb-4" />
@@ -223,29 +227,27 @@ export default function MisAlertas() {
               onDelete={handleDelete}
               onRun={handleRun}
               running={running === alert.id}
-              perfilEmail={perfil.email || null}
-              serverActive={serverActive === true}
-              onRegister={handleRegister}
-              registeredIds={registeredIds}
+              cloudEnabled={cloudActive}
             />
           ))}
         </div>
       )}
 
-      {/* Run results */}
+      {/* Error de ejecución */}
       {runError && (
         <div className="mt-6 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
           {runError}
         </div>
       )}
 
+      {/* Resultados de ejecución manual */}
       {runResults && (
         <div className="mt-6">
           <h2 className="text-sm font-semibold text-slate-700 mb-3">
             Resultados de "{runResults.keyword || 'Sin keyword'}" — {runResults.data.length} encontradas
           </h2>
           {runResults.data.length === 0 ? (
-            <p className="text-sm text-slate-400">Sin resultados para esta alerta.</p>
+            <p className="text-sm text-slate-400">Sin resultados para esta alerta en este momento.</p>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
               {runResults.data.map(l => (

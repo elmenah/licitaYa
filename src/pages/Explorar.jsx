@@ -5,6 +5,9 @@ import LicitacionCard from '../components/LicitacionCard'
 import Spinner from '../components/Spinner'
 import { fetchLicitacion, fetchLicitaciones } from '../utils/api'
 import { saveAlert } from '../utils/storage'
+import { saveAlertCloud } from '../utils/alertasCloud'
+import { getPerfil } from '../utils/perfil'
+import { isSupabaseEnabled } from '../utils/supabase'
 import { REGIONES } from '../utils/regiones'
 import { diasRestantes, formatFecha } from '../utils/formatters'
 
@@ -180,6 +183,14 @@ export default function Explorar() {
   function guardarAlerta() {
     saveAlert({ nombre: form.nombre, estado: form.estado, resultados: results.length })
     setAlertSaved(true)
+    // Guardar también en Supabase si está configurado y hay email
+    if (isSupabaseEnabled) {
+      const perfil = getPerfil()
+      if (perfil.email) {
+        saveAlertCloud({ nombre: form.nombre, estado: form.estado }, perfil.email)
+          .catch(err => console.warn('[Explorar] Cloud alert save failed:', err))
+      }
+    }
   }
 
   function limpiar() {
