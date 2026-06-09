@@ -1,0 +1,237 @@
+{
+  "name": "LicitaYa — Checker de Alertas",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "⏰ Cada hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/alertas",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "activa", "value": "eq.true" },
+            { "name": "select",  "value": "*" },
+            { "name": "order",   "value": "creado_en.asc" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $vars.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $vars.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "🗄️ Alertas activas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Supabase devuelve un array; lo convertimos en items individuales de n8n\nconst data = $input.first().json;\nif (!Array.isArray(data) || data.length === 0) {\n  console.log('[LicitaYa] Sin alertas activas.');\n  return [];\n}\nconsole.log(`[LicitaYa] ${data.length} alerta(s) activa(s).`);\nreturn data.map(alert => ({ json: alert }));"
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "🔄 Separar en items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "🔁 Loop por alerta",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.mercadopublico.cl/servicios/v1/publico/licitaciones.json",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "ticket", "value": "={{ $vars.MERCADO_PUBLICO_TICKET }}" },
+            { "name": "nombre", "value": "={{ $json.nombre ?? '' }}" },
+            { "name": "estado", "value": "={{ ($json.estado && $json.estado !== 'todos') ? $json.estado : '' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "🔍 Mercado Público API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const respuesta = $input.first().json;\nconst alerta   = $('🔁 Loop por alerta').item.json;\n\nconst licitaciones = respuesta.Listado ?? [];\nconst notificados  = new Set(alerta.codigos_notificados ?? []);\n\n// Solo las que no hemos notificado todavía\nconst nuevas = licitaciones.filter(l => l.CodigoExterno && !notificados.has(l.CodigoExterno));\n\n// Lista actualizada de códigos (histórico + nuevos)\nconst codigosActualizados = [\n  ...notificados,\n  ...nuevas.map(l => l.CodigoExterno),\n];\n\nconsole.log(`[LicitaYa] '${alerta.nombre}': ${nuevas.length} nuevas / ${licitaciones.length} total`);\n\nreturn [{ json: { alerta, nuevas, count: nuevas.length, codigosActualizados } }];"
+      },
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "🆕 Filtrar nuevas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-hayNuevas",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "a1b2c3d4-0007-4000-8000-000000000007",
+      "name": "❓ ¿Hay nuevas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { alerta, nuevas, count, codigosActualizados } = $input.first().json;\nconst keyword = alerta.nombre || 'Sin keyword';\nconst from    = $vars.FROM_EMAIL || 'alertas@licitaya.cl';\n\n// ── Filas de la tabla ─────────────────────────────────────────────────────\nconst rows = nuevas.slice(0, 15).map(l => `\n  <tr>\n    <td style=\"padding:10px 12px;border-bottom:1px solid #f1f5f9;\">\n      <p style=\"margin:0 0 4px;font-weight:600;color:#1e293b;font-size:13px;\">${l.Nombre ?? ''}</p>\n      <p style=\"margin:0;color:#94a3b8;font-size:11px;font-family:monospace;\">${l.CodigoExterno ?? ''}</p>\n    </td>\n    <td style=\"padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:12px;white-space:nowrap;\">\n      ${l.Comprador?.NombreOrganismo ?? l.Comprador?.NombreUnidad ?? '—'}\n    </td>\n  </tr>\n`).join('');\n\nconst masText = count > 15\n  ? `<p style=\"margin:12px 0 0;font-size:12px;color:#94a3b8;text-align:center;\">... y ${count - 15} más. Abre LicitaYa para verlas todas.</p>`\n  : '';\n\n// ── HTML del email ────────────────────────────────────────────────────────\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head><meta charset=\"UTF-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/></head>\n<body style=\"margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f8fafc;padding:32px 16px;\">\n  <tr><td align=\"center\">\n    <table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;width:100%;\">\n      <tr>\n        <td style=\"background:#f97316;border-radius:16px 16px 0 0;padding:28px 32px;\">\n          <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n            <tr>\n              <td>\n                <p style=\"margin:0;font-size:22px;font-weight:700;color:#fff;\"><span style=\"color:#fff1e0;\">Licita</span>Ya</p>\n                <p style=\"margin:4px 0 0;font-size:13px;color:#fed7aa;\">Monitor del mercado público chileno</p>\n              </td>\n              <td align=\"right\">\n                <span style=\"background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:700;padding:6px 14px;border-radius:20px;\">🔔 NUEVA ALERTA</span>\n              </td>\n            </tr>\n          </table>\n        </td>\n      </tr>\n      <tr>\n        <td style=\"background:#fff;padding:32px;\">\n          <h1 style=\"margin:0 0 8px;font-size:18px;font-weight:700;color:#1e293b;\">${count} nueva${count !== 1 ? 's' : ''} licitacion${count !== 1 ? 'es' : ''}</h1>\n          <p style=\"margin:0 0 24px;font-size:14px;color:#64748b;\">Para tu alerta: <strong style=\"color:#f97316;\">\"${keyword}\"</strong></p>\n          <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;\">\n            <thead>\n              <tr style=\"background:#f8fafc;\">\n                <th style=\"padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;\">Licitación</th>\n                <th style=\"padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;\">Organismo</th>\n              </tr>\n            </thead>\n            <tbody>${rows}</tbody>\n          </table>\n          ${masText}\n          <div style=\"margin-top:28px;text-align:center;\">\n            <a href=\"https://licitaya.netlify.app/explorar\" style=\"display:inline-block;background:#f97316;color:#fff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;\">Ver en LicitaYa →</a>\n          </div>\n        </td>\n      </tr>\n      <tr>\n        <td style=\"background:#f8fafc;border-radius:0 0 16px 16px;padding:20px 32px;border-top:1px solid #e2e8f0;\">\n          <p style=\"margin:0;font-size:11px;color:#94a3b8;text-align:center;\">Configurado desde <strong>LicitaYa</strong> · Desactiva la alerta en la app para no recibir más emails.</p>\n        </td>\n      </tr>\n    </table>\n  </td></tr>\n</table>\n</body></html>`;\n\nconst subject = `🔔 LicitaYa: ${count} nueva${count !== 1 ? 's' : ''} licitacion${count !== 1 ? 'es' : ''} para \"${keyword}\"`;\n\n// Pre-serializamos los bodies para los nodos HTTP siguientes\nconst resendPayload = JSON.stringify({ from, to: alerta.email, subject, html });\nconst supabasePayload = JSON.stringify({\n  codigos_notificados: codigosActualizados,\n  ultima_ejecucion: new Date().toISOString(),\n});\n\nreturn [{ json: { alerta, count, codigosActualizados, resendPayload, supabasePayload } }];"
+      },
+      "id": "a1b2c3d4-0008-4000-8000-000000000008",
+      "name": "📧 Construir email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $vars.RESEND_API_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.resendPayload }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0009-4000-8000-000000000009",
+      "name": "📨 Enviar por Resend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 160]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/alertas",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "id", "value": "=eq.{{ $('📧 Construir email').item.json.alerta.id }}" }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $vars.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $vars.SUPABASE_ANON_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('📧 Construir email').item.json.supabasePayload }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0010-4000-8000-000000000010",
+      "name": "💾 Actualizar Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 160]
+    }
+  ],
+  "connections": {
+    "⏰ Cada hora": {
+      "main": [[{ "node": "🗄️ Alertas activas", "type": "main", "index": 0 }]]
+    },
+    "🗄️ Alertas activas": {
+      "main": [[{ "node": "🔄 Separar en items", "type": "main", "index": 0 }]]
+    },
+    "🔄 Separar en items": {
+      "main": [[{ "node": "🔁 Loop por alerta", "type": "main", "index": 0 }]]
+    },
+    "🔁 Loop por alerta": {
+      "main": [
+        [{ "node": "🔍 Mercado Público API", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "🔍 Mercado Público API": {
+      "main": [[{ "node": "🆕 Filtrar nuevas", "type": "main", "index": 0 }]]
+    },
+    "🆕 Filtrar nuevas": {
+      "main": [[{ "node": "❓ ¿Hay nuevas?", "type": "main", "index": 0 }]]
+    },
+    "❓ ¿Hay nuevas?": {
+      "main": [
+        [{ "node": "📧 Construir email", "type": "main", "index": 0 }],
+        [{ "node": "🔁 Loop por alerta",  "type": "main", "index": 0 }]
+      ]
+    },
+    "📧 Construir email": {
+      "main": [[{ "node": "📨 Enviar por Resend", "type": "main", "index": 0 }]]
+    },
+    "📨 Enviar por Resend": {
+      "main": [[{ "node": "💾 Actualizar Supabase", "type": "main", "index": 0 }]]
+    },
+    "💾 Actualizar Supabase": {
+      "main": [[{ "node": "🔁 Loop por alerta", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
