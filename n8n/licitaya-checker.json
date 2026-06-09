@@ -21,12 +21,13 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://TU-PROYECTO.supabase.co/rest/v1/perfiles",
+        "url": "https://TU-PROYECTO.supabase.co/rest/v1/alertas",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
+            { "name": "tipo",   "value": "eq.rubro" },
+            { "name": "activa", "value": "eq.true" },
             { "name": "email",  "value": "not.is.null" },
-            { "name": "rubro",  "value": "not.is.null" },
             { "name": "select", "value": "*" }
           ]
         },
@@ -40,41 +41,20 @@
         "options": {}
       },
       "id": "a1b2c3d4-0002-4000-8000-000000000002",
-      "name": "🗄️ Perfiles con rubro",
+      "name": "🗄️ Alertas de rubro",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Supabase devuelve un array; lo convertimos en items individuales\nconst data = $input.first().json;\nif (!Array.isArray(data) || data.length === 0) {\n  console.log('[LicitaYa] Sin perfiles configurados.');\n  return [];\n}\nconsole.log(`[LicitaYa] ${data.length} empresa(s) a revisar.`);\nreturn data.map(perfil => ({ json: perfil }));"
-      },
-      "id": "a1b2c3d4-0003-4000-8000-000000000003",
-      "name": "🔄 Separar en items",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [480, 300]
-    },
-    {
-      "parameters": {
-        "batchSize": 1,
-        "options": {}
-      },
-      "id": "a1b2c3d4-0004-4000-8000-000000000004",
-      "name": "🔁 Loop por perfil",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [720, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Mapea el rubro del perfil a la keyword de búsqueda en Mercado Público\nconst perfil = $input.first().json;\n\nconst KEYWORDS = {\n  aseo:          'aseo',\n  construccion:  'construcción',\n  ti:            'tecnología',\n  salud:         'salud',\n  educacion:     'educación',\n  consultoria:   'consultoría',\n  alimentacion:  'alimentación',\n  transporte:    'transporte',\n  mantenimiento: 'mantenimiento',\n  electricidad:  'electricidad',\n  mecanica:      'mecánica',\n  seguridad:     'seguridad',\n  jardineria:    'jardinería',\n};\n\nconst keyword = KEYWORDS[perfil.rubro] ?? perfil.rubro;\nconsole.log(`[LicitaYa] ${perfil.nombre} (${perfil.rubro}) → buscando \"${keyword}\"`);\n\nreturn [{ json: { ...perfil, keyword } }];"
+        "jsCode": "// Mapea el rubroId (nombre en alertas) al keyword para Mercado Público\n// data.nombre = rubroId, data.id = alertaId, data.email = destinatario\nconst alerta = $input.first().json;\n\nconst KEYWORDS = {\n  aseo:          'aseo',\n  obras:         'construcción',\n  electricidad:  'electricidad',\n  mecanica:      'mecánica',\n  mantenimiento: 'mantenimiento',\n  seguridad:     'seguridad',\n  ferreteria:    'ferretería',\n  transporte:    'transporte',\n  tics:          'tecnología',\n  alimentacion:  'alimentación',\n  salud:         'salud',\n  vestuario:     'vestuario',\n  jardineria:    'jardinería',\n  servicios:     'consultoría',\n};\n\nconst rubroId = alerta.nombre ?? '';\nconst keyword = KEYWORDS[rubroId] ?? rubroId;\nconsole.log(`[LicitaYa] Alerta ${alerta.id} (${alerta.email}) rubro \"${rubroId}\" → buscando \"${keyword}\"`);\n\nreturn [{ json: { ...alerta, rubroId, keyword } }];"
       },
       "id": "a1b2c3d4-0005-4000-8000-000000000005",
       "name": "🗺️ Rubro → Keyword",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [960, 300]
+      "position": [480, 300]
     },
     {
       "parameters": {
@@ -94,17 +74,17 @@
       "name": "🔍 Mercado Público API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 300]
+      "position": [720, 300]
     },
     {
       "parameters": {
-        "jsCode": "const respuesta = $input.first().json;\nconst perfil    = $('🔁 Loop por perfil').item.json;\n\nconst licitaciones = respuesta.Listado ?? [];\nconst notificados  = new Set(perfil.codigos_notificados ?? []);\n\n// Solo las licitaciones que aún no notificamos\nconst nuevas = licitaciones.filter(\n  l => l.CodigoExterno && !notificados.has(l.CodigoExterno)\n);\n\n// Lista actualizada (histórico + nuevas)\nconst codigosActualizados = [\n  ...notificados,\n  ...nuevas.map(l => l.CodigoExterno),\n];\n\nconsole.log(`[LicitaYa] ${perfil.nombre}: ${nuevas.length} nuevas / ${licitaciones.length} total`);\n\nreturn [{ json: { perfil, nuevas, count: nuevas.length, codigosActualizados } }];"
+        "jsCode": "const respuesta = $input.first().json;\nconst alerta    = $('🗺️ Rubro → Keyword').item.json;\n\nconst licitaciones = respuesta.Listado ?? [];\nconst notificados  = new Set(alerta.codigos_notificados ?? []);\n\n// Solo las licitaciones que aún no notificamos\nconst nuevas = licitaciones.filter(\n  l => l.CodigoExterno && !notificados.has(l.CodigoExterno)\n);\n\n// Lista actualizada (histórico + nuevas)\nconst codigosActualizados = [\n  ...notificados,\n  ...nuevas.map(l => l.CodigoExterno),\n];\n\nconsole.log(`[LicitaYa] Alerta ${alerta.id} (${alerta.email}): ${nuevas.length} nuevas / ${licitaciones.length} total`);\n\nreturn [{ json: { alerta, nuevas, count: nuevas.length, codigosActualizados } }];"
       },
       "id": "a1b2c3d4-0007-4000-8000-000000000007",
       "name": "🆕 Filtrar nuevas",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1440, 300]
+      "position": [960, 300]
     },
     {
       "parameters": {
@@ -132,17 +112,17 @@
       "name": "❓ ¿Hay nuevas?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1680, 300]
+      "position": [1200, 300]
     },
     {
       "parameters": {
-        "jsCode": "const { perfil, nuevas, count, codigosActualizados } = $input.first().json;\nconst rubroLabel = perfil.rubro ?? 'tu rubro';\n\nconst rows = nuevas.slice(0, 15).map(l => `\n  <tr>\n    <td style=\"padding:10px 12px;border-bottom:1px solid #f1f5f9;\">\n      <p style=\"margin:0 0 4px;font-weight:600;color:#1e293b;font-size:13px;\">${l.Nombre ?? ''}</p>\n      <p style=\"margin:0;color:#94a3b8;font-size:11px;font-family:monospace;\">${l.CodigoExterno ?? ''}</p>\n    </td>\n    <td style=\"padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:12px;white-space:nowrap;\">\n      ${l.Comprador?.NombreOrganismo ?? l.Comprador?.NombreUnidad ?? '—'}\n    </td>\n    <td style=\"padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:12px;white-space:nowrap;\">\n      ${l.FechaCierre ? new Date(l.FechaCierre).toLocaleDateString('es-CL') : '—'}\n    </td>\n  </tr>\n`).join('');\n\nconst masText = count > 15\n  ? `<p style=\"margin:12px 0 0;font-size:12px;color:#94a3b8;text-align:center;\">... y ${count - 15} más en LicitaYa</p>`\n  : '';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head><meta charset=\"UTF-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/></head>\n<body style=\"margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f8fafc;padding:32px 16px;\">\n  <tr><td align=\"center\">\n    <table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;width:100%;\">\n\n      <!-- Header -->\n      <tr>\n        <td style=\"background:#f97316;border-radius:16px 16px 0 0;padding:28px 32px;\">\n          <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n            <tr>\n              <td>\n                <p style=\"margin:0;font-size:22px;font-weight:700;color:#fff;\">\n                  <span style=\"color:#fff1e0;\">Licita</span>Ya\n                </p>\n                <p style=\"margin:4px 0 0;font-size:13px;color:#fed7aa;\">Monitor del mercado público chileno</p>\n              </td>\n              <td align=\"right\">\n                <span style=\"background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:700;padding:6px 14px;border-radius:20px;\">\n                  🔔 NUEVA ALERTA\n                </span>\n              </td>\n            </tr>\n          </table>\n        </td>\n      </tr>\n\n      <!-- Cuerpo -->\n      <tr>\n        <td style=\"background:#fff;padding:32px;\">\n          <h1 style=\"margin:0 0 4px;font-size:18px;font-weight:700;color:#1e293b;\">\n            ${count} nueva${count !== 1 ? 's' : ''} licitacion${count !== 1 ? 'es' : ''}\n          </h1>\n          <p style=\"margin:0 0 24px;font-size:14px;color:#64748b;\">\n            Para <strong style=\"color:#1e293b;\">${perfil.nombre}</strong>\n            · Rubro: <strong style=\"color:#f97316;\">${rubroLabel}</strong>\n          </p>\n\n          <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"\n            style=\"border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;\">\n            <thead>\n              <tr style=\"background:#f8fafc;\">\n                <th style=\"padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;\">Licitación</th>\n                <th style=\"padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;\">Organismo</th>\n                <th style=\"padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;\">Cierre</th>\n              </tr>\n            </thead>\n            <tbody>${rows}</tbody>\n          </table>\n\n          ${masText}\n\n          <div style=\"margin-top:28px;text-align:center;\">\n            <a href=\"https://licitaya.netlify.app/mi-rubro\"\n              style=\"display:inline-block;background:#f97316;color:#fff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;\">\n              Ver todas en LicitaYa →\n            </a>\n          </div>\n        </td>\n      </tr>\n\n      <!-- Footer -->\n      <tr>\n        <td style=\"background:#f8fafc;border-radius:0 0 16px 16px;padding:20px 32px;border-top:1px solid #e2e8f0;\">\n          <p style=\"margin:0;font-size:11px;color:#94a3b8;text-align:center;\">\n            Configurado desde <strong>LicitaYa</strong> · Cambia tu rubro en Mi Empresa para ajustar las alertas.\n          </p>\n        </td>\n      </tr>\n\n    </table>\n  </td></tr>\n</table>\n</body></html>`;\n\nconst subject = `🔔 LicitaYa: ${count} nueva${count !== 1 ? 's' : ''} licitacion${count !== 1 ? 'es' : ''} para \"${rubroLabel}\"`;\n\nconst resendPayload = JSON.stringify({\n  from: 'alertas@tudominio.cl',\n  to:   perfil.email,\n  subject,\n  html,\n});\n\nconst supabasePayload = JSON.stringify({\n  codigos_notificados: codigosActualizados,\n});\n\nreturn [{ json: { perfil, resendPayload, supabasePayload } }];"
+        "jsCode": "const { alerta, nuevas, count, codigosActualizados } = $input.first().json;\n\nconst LABELS = {\n  aseo:          'Aseo y Limpieza',\n  obras:         'Obras y Construcción',\n  electricidad:  'Electricidad e Iluminación',\n  mecanica:      'Mecánica y Equipos',\n  mantenimiento: 'Mantenimiento Industrial',\n  seguridad:     'Seguridad y Vigilancia',\n  ferreteria:    'Ferretería y Materiales',\n  transporte:    'Transporte y Logística',\n  tics:          'TI y Tecnología',\n  alimentacion:  'Alimentación',\n  salud:         'Salud e Insumos',\n  vestuario:     'Vestuario y EPP',\n  jardineria:    'Jardines y Áreas Verdes',\n  servicios:     'Servicios Profesionales',\n};\n\nconst rubroLabel = LABELS[alerta.rubroId] ?? alerta.rubroId ?? 'tu rubro';\n\nconst rows = nuevas.slice(0, 15).map(l => `\n  <tr>\n    <td style=\"padding:10px 12px;border-bottom:1px solid #f1f5f9;\">\n      <p style=\"margin:0 0 4px;font-weight:600;color:#1e293b;font-size:13px;\">${l.Nombre ?? ''}</p>\n      <p style=\"margin:0;color:#94a3b8;font-size:11px;font-family:monospace;\">${l.CodigoExterno ?? ''}</p>\n    </td>\n    <td style=\"padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:12px;white-space:nowrap;\">\n      ${l.Comprador?.NombreOrganismo ?? l.Comprador?.NombreUnidad ?? '—'}\n    </td>\n    <td style=\"padding:10px 12px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:12px;white-space:nowrap;\">\n      ${l.FechaCierre ? new Date(l.FechaCierre).toLocaleDateString('es-CL') : '—'}\n    </td>\n  </tr>\n`).join('');\n\nconst masText = count > 15\n  ? `<p style=\"margin:12px 0 0;font-size:12px;color:#94a3b8;text-align:center;\">... y ${count - 15} más en LicitaYa</p>`\n  : '';\n\nconst html = `<!DOCTYPE html>\n<html lang=\"es\">\n<head><meta charset=\"UTF-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/></head>\n<body style=\"margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;\">\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f8fafc;padding:32px 16px;\">\n  <tr><td align=\"center\">\n    <table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:600px;width:100%;\">\n      <tr>\n        <td style=\"background:#f97316;border-radius:16px 16px 0 0;padding:28px 32px;\">\n          <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\">\n            <tr>\n              <td>\n                <p style=\"margin:0;font-size:22px;font-weight:700;color:#fff;\">\n                  <span style=\"color:#fff1e0;\">Licita</span>Ya\n                </p>\n                <p style=\"margin:4px 0 0;font-size:13px;color:#fed7aa;\">Monitor del mercado público chileno</p>\n              </td>\n              <td align=\"right\">\n                <span style=\"background:rgba(255,255,255,0.2);color:#fff;font-size:11px;font-weight:700;padding:6px 14px;border-radius:20px;\">\n                  🔔 NUEVA ALERTA\n                </span>\n              </td>\n            </tr>\n          </table>\n        </td>\n      </tr>\n      <tr>\n        <td style=\"background:#fff;padding:32px;\">\n          <h1 style=\"margin:0 0 4px;font-size:18px;font-weight:700;color:#1e293b;\">\n            ${count} nueva${count !== 1 ? 's' : ''} licitacion${count !== 1 ? 'es' : ''}\n          </h1>\n          <p style=\"margin:0 0 24px;font-size:14px;color:#64748b;\">\n            Rubro: <strong style=\"color:#f97316;\">${rubroLabel}</strong>\n          </p>\n          <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"\n            style=\"border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;\">\n            <thead>\n              <tr style=\"background:#f8fafc;\">\n                <th style=\"padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;\">Licitación</th>\n                <th style=\"padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;\">Organismo</th>\n                <th style=\"padding:10px 12px;text-align:left;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;\">Cierre</th>\n              </tr>\n            </thead>\n            <tbody>${rows}</tbody>\n          </table>\n          ${masText}\n          <div style=\"margin-top:28px;text-align:center;\">\n            <a href=\"https://licitaya.netlify.app/mi-rubro\"\n              style=\"display:inline-block;background:#f97316;color:#fff;font-weight:600;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;\">\n              Ver todas en LicitaYa →\n            </a>\n          </div>\n        </td>\n      </tr>\n      <tr>\n        <td style=\"background:#f8fafc;border-radius:0 0 16px 16px;padding:20px 32px;border-top:1px solid #e2e8f0;\">\n          <p style=\"margin:0;font-size:11px;color:#94a3b8;text-align:center;\">\n            Gestiona tus alertas en <strong>LicitaYa → Mis Alertas</strong>\n          </p>\n        </td>\n      </tr>\n    </table>\n  </td></tr>\n</table>\n</body></html>`;\n\nconst subject = `🔔 LicitaYa: ${count} nueva${count !== 1 ? 's' : ''} licitacion${count !== 1 ? 'es' : ''} · ${rubroLabel}`;\n\nconst resendPayload = JSON.stringify({\n  from:    'alertas@daigchile.cl',\n  to:      alerta.email,\n  subject,\n  html,\n});\n\nconst supabasePayload = JSON.stringify({\n  codigos_notificados: codigosActualizados,\n  ultima_ejecucion:    new Date().toISOString(),\n});\n\nreturn [{ json: { alerta, resendPayload, supabasePayload } }];"
       },
       "id": "a1b2c3d4-0009-4000-8000-000000000009",
       "name": "📧 Construir email",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1920, 160]
+      "position": [1440, 160]
     },
     {
       "parameters": {
@@ -165,18 +145,12 @@
       "name": "📨 Enviar por Resend",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2160, 160]
+      "position": [1680, 160]
     },
     {
       "parameters": {
         "method": "PATCH",
-        "url": "https://TU-PROYECTO.supabase.co/rest/v1/perfiles",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            { "name": "email", "value": "=eq.{{ $('📧 Construir email').item.json.perfil.email }}" }
-          ]
-        },
+        "url": "=https://TU-PROYECTO.supabase.co/rest/v1/alertas?id=eq.{{ $('📧 Construir email').item.json.alerta.id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -196,24 +170,15 @@
       "name": "💾 Guardar códigos vistos",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2400, 160]
+      "position": [1920, 160]
     }
   ],
   "connections": {
     "⏰ Cada hora": {
-      "main": [[{ "node": "🗄️ Perfiles con rubro", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "🗄️ Alertas de rubro", "type": "main", "index": 0 }]]
     },
-    "🗄️ Perfiles con rubro": {
-      "main": [[{ "node": "🔄 Separar en items", "type": "main", "index": 0 }]]
-    },
-    "🔄 Separar en items": {
-      "main": [[{ "node": "🔁 Loop por perfil", "type": "main", "index": 0 }]]
-    },
-    "🔁 Loop por perfil": {
-      "main": [
-        [{ "node": "🗺️ Rubro → Keyword", "type": "main", "index": 0 }],
-        []
-      ]
+    "🗄️ Alertas de rubro": {
+      "main": [[{ "node": "🗺️ Rubro → Keyword", "type": "main", "index": 0 }]]
     },
     "🗺️ Rubro → Keyword": {
       "main": [[{ "node": "🔍 Mercado Público API", "type": "main", "index": 0 }]]
@@ -226,8 +191,8 @@
     },
     "❓ ¿Hay nuevas?": {
       "main": [
-        [{ "node": "📧 Construir email",  "type": "main", "index": 0 }],
-        [{ "node": "🔁 Loop por perfil",  "type": "main", "index": 0 }]
+        [{ "node": "📧 Construir email", "type": "main", "index": 0 }],
+        []
       ]
     },
     "📧 Construir email": {
@@ -235,9 +200,6 @@
     },
     "📨 Enviar por Resend": {
       "main": [[{ "node": "💾 Guardar códigos vistos", "type": "main", "index": 0 }]]
-    },
-    "💾 Guardar códigos vistos": {
-      "main": [[{ "node": "🔁 Loop por perfil", "type": "main", "index": 0 }]]
     }
   },
   "settings": {

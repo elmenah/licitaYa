@@ -8,10 +8,16 @@ import { getAlertsCloud, deleteAlertCloud } from '../utils/alertasCloud'
 import { getPerfil } from '../utils/perfil'
 import { isSupabaseEnabled } from '../utils/supabase'
 import { fetchLicitaciones } from '../utils/api'
+import { RUBROS } from '../utils/rubros'
 
 // ─── AlertCard ────────────────────────────────────────────────────────────────
 
 function AlertCard({ alert, onDelete, onRun, running, cloudEnabled }) {
+  const esRubro  = alert.tipo === 'rubro'
+  const rubroMeta = esRubro ? RUBROS.find(r => r.id === alert.nombre) : null
+  const titulo   = esRubro
+    ? (rubroMeta ? `${rubroMeta.emoji} ${rubroMeta.label}` : alert.nombre)
+    : (alert.nombre || <span className="text-slate-400 italic">Sin keyword</span>)
   const estadoLabel = alert.estado
     ? alert.estado.charAt(0).toUpperCase() + alert.estado.slice(1)
     : 'Todos'
@@ -20,11 +26,15 @@ function AlertCard({ alert, onDelete, onRun, running, cloudEnabled }) {
     <div className="bg-white rounded-xl border border-slate-200 p-5 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-slate-800 text-sm truncate">
-            {alert.nombre || <span className="text-slate-400 italic">Sin keyword</span>}
-          </p>
+          <p className="font-semibold text-slate-800 text-sm truncate">{titulo}</p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">{estadoLabel}</span>
+            {esRubro ? (
+              <span className="text-xs px-2 py-0.5 bg-orange-50 text-orange-600 border border-orange-200 rounded-full font-medium">
+                🔔 Automático · por rubro
+              </span>
+            ) : (
+              <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">{estadoLabel}</span>
+            )}
             {alert.ultimosResultados !== undefined && (
               <span className="text-xs text-slate-400">{alert.ultimosResultados} resultados</span>
             )}
@@ -48,20 +58,23 @@ function AlertCard({ alert, onDelete, onRun, running, cloudEnabled }) {
       </p>
 
       <div className="space-y-2 mt-auto">
-        <button
-          onClick={() => onRun(alert)}
-          disabled={running}
-          className="w-full flex items-center justify-center gap-2 bg-orange-50 hover:bg-orange-100 text-orange-600 text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
-        >
-          {running ? <Spinner size="sm" /> : <Play size={14} />}
-          Ejecutar ahora
-        </button>
+        {/* Solo keyword-alerts tienen "Ejecutar ahora" */}
+        {!esRubro && (
+          <button
+            onClick={() => onRun(alert)}
+            disabled={running}
+            className="w-full flex items-center justify-center gap-2 bg-orange-50 hover:bg-orange-100 text-orange-600 text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {running ? <Spinner size="sm" /> : <Play size={14} />}
+            Ejecutar ahora
+          </button>
+        )}
 
         {/* Estado de notificación automática */}
         {cloudEnabled ? (
           <div className="w-full flex items-center justify-center gap-1.5 bg-green-50 text-green-600 text-xs font-semibold py-2 rounded-lg">
             <CheckCircle size={12} />
-            Notificaciones automáticas activas
+            {esRubro ? 'Email automático cada hora' : 'Notificaciones automáticas activas'}
           </div>
         ) : (
           <div className="w-full flex items-center justify-center gap-1.5 bg-slate-50 text-slate-400 text-xs py-2 rounded-lg">
